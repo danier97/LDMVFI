@@ -1,0 +1,98 @@
+model:
+  base_learning_rate: 1.0e-06
+  target: ldm.models.diffusion.ddpm.LatentDiffusionVFI
+  params:
+    linear_start: 0.0015
+    linear_end: 0.0195
+    num_timesteps_cond: 1
+    log_every_t: 200
+    timesteps: 1000
+    first_stage_key: image
+    cond_stage_key: past_future_frames
+    image_size: 8
+    channels: 3
+    cond_stage_trainable: False
+    concat_mode: True
+    monitor: val/loss_simple_ema
+    unet_config:
+      target: ldm.modules.diffusionmodules.openaimodel.UNetModel
+      params:
+        image_size: 8 # img size of latent, used during training, determines some model params, so don't change for inference
+        in_channels: 9
+        out_channels: 3
+        model_channels: 256
+        attention_resolutions:
+        #note: this isn\t actually the resolution but
+        # the downsampling factor, i.e. this corresnponds to
+        # attention on spatial resolution 8,16,32, as the
+        # spatial reolution of the latents is 32 for f8
+        - 4
+        - 2
+        - 1
+        num_res_blocks: 2
+        channel_mult:
+        - 1
+        - 2
+        - 4
+        num_head_channels: 32
+        use_max_self_attn: True # replace all full self-attention with MaxViT
+    first_stage_config:
+      target: ldm.models.autoencoder.VQFlowNetInterface
+      params:
+        ckpt_path: null # must specify pre-trained autoencoding model ckpt to train the denoising UNet
+        embed_dim: 3
+        n_embed: 8192
+        ddconfig:
+          double_z: False
+          z_channels: 3
+          resolution: 256
+          in_channels: 3
+          out_ch: 3
+          ch: 64
+          ch_mult: [1,2,2,2,4]  # f = 2 ^ len(ch_mult)
+          num_res_blocks: 1
+          cond_type: max_cross_attn
+          attn_type: max
+          attn_resolutions: [ ]
+          dropout: 0.0
+        lossconfig:
+          target: torch.nn.Identity
+    cond_stage_config: __is_first_stage__
+
+
+data:
+  target: main.DataModuleFromConfig
+  params:
+    batch_size: 64
+    num_workers: 0
+    wrap: false
+    train:
+      target: ldm.data.bvi_vimeo.BVI_Vimeo_triplet
+      params:
+        db_dir: C:/data_tmp/
+        crop_sz: [256,256]
+        iter: True
+    validation:
+      target: ldm.data.bvi_vimeo.Vimeo90k_triplet
+      params:
+        db_dir: C:/data_tmp/vimeo_septuplet/
+        train: False
+        crop_sz: [256,256]
+        augment_s: False
+        augment_t: False
+
+
+lightning:
+  callbacks:
+    image_logger:
+      target: main.ImageLogger
+      params:
+        batch_frequency: 1250
+        val_batch_frequency: 125
+        max_images: 8
+        increase_log_steps: False
+        log_images_kwargs: {'N': 1}
+
+  trainer:
+    benchmark: True
+    max_epochs: -1
