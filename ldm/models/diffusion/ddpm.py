@@ -1220,7 +1220,7 @@ class LatentDiffusionVFI(DDPM):
         if return_original_cond:
             out.append(xc)
         if return_phi:
-            out.append(phi_next_list)
+            out.append(phi_prev_list)
             out.append(phi_next_list)
         return out
 
